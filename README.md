@@ -1,0 +1,1 @@
+![](figures/triple_animation.mp4)
