@@ -3,7 +3,8 @@ using Syzygy, GLMakie, LinearAlgebra, ProgressMeter
 using DataStructures: CircularBuffer
 GLMakie.set_theme!(theme_black())
 
-function animate_2d()
+const FIGPATH = joinpath(@__DIR__, "..", "figures")
+function many_triples_2d(;outname="many_triples_2d")
     masses = [1.0, 1.0, 1.0]u"Msun"
     N = 2000
     es = [[0.1, 0.1], [0.1, 0.5], [0.1, 0.9]]
@@ -73,7 +74,8 @@ function animate_2d()
     end
 
     p = Progress(N)
-    record(fig, "figures/triple_animation.mp4", frames; framerate = N÷25) do frame
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷25) do frame
 
         for i in CartesianIndices(axs)
             
@@ -101,7 +103,7 @@ function animate_2d()
 end
 
 
-function animate_3d()
+function mutual_inclination(;outname = "mutual_inclination")
     masses = [1.0, 1.0, 1.0]u"Msun"
     N = 2000
     e = 0.1
@@ -167,7 +169,8 @@ function animate_3d()
     end
 
     p = Progress(N)
-    record(fig, "figures/triple_animation_inclination.mp4", frames; framerate = N÷25) do frame
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷25) do frame
 
         for i in CartesianIndices(axs)
             push!(r1s[i][], positions[i, :, 1, frame])
@@ -193,7 +196,7 @@ function animate_3d()
     end
 end
 
-function animate_kozailidov()
+function kozai_lidov(;outname = "kozai_lidov")
     masses = [1.0, 1.0, 1.0]u"Msun"
     N = 10000
     e = 0.1
@@ -234,7 +237,8 @@ function animate_kozailidov()
     # lines!(axs[1, 1], tert[1], tert[2], color=colors[3], linewidth=1)
 
     p = Progress(N)
-    record(fig, "figures/triple_animation_kozailidov.mp4", frames; framerate = N÷15) do frame
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷15) do frame
 
 
         push!(r1s[], positions[:, 1, frame])
@@ -250,7 +254,7 @@ function animate_kozailidov()
     end
 end
 
-function animate_kozailidov_inner_bin()
+function kozai_lidov_inner_binary(;outname="kozai_lidov_inner_binary")
     masses = [1.0, 1.0, 1.0]u"Msun"
     N = 100#10000
     e = 0.1
@@ -315,8 +319,8 @@ function animate_kozailidov_inner_bin()
     scatter!(ax_ecc, P_outs[1], e_ins)
     scatter!(ax_inc, P_outs[1], i_muts)
 
-    record(fig, "figures/triple_animation_kozailidov_inner.mp4", frames; 
-            framerate = N÷20) do frame
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷20) do frame
 
         push!(r1s[], positions[[1,3], 1, frame] .- com_in[frame][[1,3]])
         push!(r2s[], positions[[1,3], 2, frame] .- com_in[frame][[1,3]])
@@ -445,7 +449,7 @@ function plot_orbital_elements()
 end
 
 
-function animate_destablization(;showplot=false, kwargs...)
+function unstable_triple(;outname="unstable_triple", showplot=false, kwargs...)
     masses = [1.0, 1.0, 1.0]u"Msun"
     N = 5000
     e = 0.1
@@ -506,8 +510,8 @@ function animate_destablization(;showplot=false, kwargs...)
     scatter!(ax, sc2s, color=colors[2], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
     scatter!(ax, sc3s, color=colors[3], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
 
-
-    record(fig, "figures/triple_animation_destabilize.mp4", frames; framerate = N÷25) do frame
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, SAVEPATH, frames; framerate = N÷25) do frame
 
 
         push!(r1s[], positions[1:2, 1, frame])
@@ -718,5 +722,66 @@ function collision_mesh_animation(T, showplot=false)
 # 	arrows!(ax, [[r] for r in r2]..., [[v] for v in v2]...)
 
 # 	fig
+
+end
+
+function simple_chaotic_threebody_vis(T=1; outname="simple_threebody_scatter")
+    masses = [1.0, 1.0, 1.0]u"Msun"
+    N = 5000
+    e = 0.1
+    i = [0.0, 0.0]u"rad"
+    a = [0.1, 0.1]u"AU"
+    positions = zeros(3, 3, N)
+
+
+    triple = multibodysystem(masses, a=a, e=e, i=i)
+    res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
+    sol = analyse_simulation(res)
+    positions[:, :, :] = ustrip.(u"AU", sol.r)
+    
+    if showplot
+        figg = Figure()
+        axx = Axis(figg[1, 1], aspect=1)
+        lines!(axx, positions[1,1,:],  positions[2,1,:])
+        lines!(axx, positions[1,2,:],  positions[2,2,:])
+        lines!(axx, positions[1,3,:],  positions[2,3,:])
+        return figg
+    end
+
+    fig = Figure(size=(1080, 1080))
+    colors = [:red, :cyan, :yellow]
+    ax = Axis(fig[1, 1], xticklabelsvisible=false, 
+                         yticklabelsvisible=false)
+    hidedecorations!(ax)
+    hidespines!(ax)
+    xlims!(ax, -a[2].val, a[2].val)
+    ylims!(ax, -a[2].val, a[2].val)
+
+    frames = 2:N
+
+    colors = Makie.wong_colors()[[1, 2, 3]]
+
+    sc1s = Observable{Point2f}()
+    sc2s = Observable{Point2f}()
+    sc3s = Observable{Point2f}()
+    
+    scatter!(ax, sc1s, color=colors[1], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
+    scatter!(ax, sc2s, color=colors[2], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
+    scatter!(ax, sc3s, color=colors[3], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
+
+
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷25) do frame
+
+
+        sc1s[] = positions[1:2, 1, frame] |> Point2f
+        sc2s[] = positions[1:2, 2, frame] |> Point2f
+        sc3s[] = positions[1:2, 3, frame] |> Point2f
+
+        notify(sc1s)
+        notify(sc2s)
+        notify(sc3s)
+
+    end
 
 end
