@@ -787,3 +787,79 @@ function simple_chaotic_threebody_vis(T=1; outname="simple_threebody_scatter")
     end
 
 end
+
+function chaotic_3body(;outname="chaotic_3body", showplot=false)
+    masses = [1.0, 1.0, 1.0]u"Msun"
+    N = 1000
+    e = [0.1, 0.5]
+    i = [0.0, 0.0]u"rad"
+    a = [0.4, 0.8]u"AU"
+    positions = zeros(3, 3, N)
+
+    triple = multibodysystem(masses, a=a, e=e, i=i)
+    res = simulate(triple, t_sim=10.0, npoints=N, callbacks=[])
+    sol = analyse_simulation(res)
+    positions[:, :, :] = ustrip.(u"AU", sol.r)
+    
+    if showplot
+        figg = Figure()
+        axx = Axis(figg[1, 1], aspect=1)
+        lines!(axx, positions[1,1,:],  positions[2,1,:])
+        lines!(axx, positions[1,2,:],  positions[2,2,:])
+        lines!(axx, positions[1,3,:],  positions[2,3,:])
+        return figg
+    end
+
+    fig = Figure(size=(1080, 1080))
+    colors = [:red, :cyan, :yellow]
+    ax = Axis(fig[1, 1], xticklabelsvisible=false, 
+                         yticklabelsvisible=false,
+                         xticksvisible=false,
+                         yticksvisible=false,
+                         xgridvisible=false, ygridvisible=false, backgroundcolor=:transparent)
+    
+    hidespines!(ax)
+    xlims!(ax, -1, 1)
+    ylims!(ax, -1, 1)
+
+    frames = 2:N
+
+    nt = N÷100*20
+
+    colors = Makie.wong_colors()[[1, 2, 3]]
+
+
+    sc1s = Observable{Point2f}()
+    sc2s = Observable{Point2f}()
+    sc3s = Observable{Point2f}()
+    
+
+    scatter!(ax, sc1s, color=colors[1], colormap=Makie.wong_colors(), colorrange=(1, 3), markersize=100, markerspace=:pixel)
+    scatter!(ax, sc2s, color=colors[2], colormap=Makie.wong_colors(), colorrange=(1, 3), markersize=100, markerspace=:pixel)
+    scatter!(ax, sc3s, color=colors[3], colormap=Makie.wong_colors(), colorrange=(1, 3), markersize=100, markerspace=:pixel)
+
+    # scatter!(ax, sc1s, markersize=100, markerspace=:pixel)
+    # scatter!(ax, sc2s, markersize=100, markerspace=:pixel)
+    # scatter!(ax, sc3s, markersize=100, markerspace=:pixel)
+
+
+    savepath = joinpath(FIGPATH, outname)*".gif"
+
+    p = Progress(N)
+    record(fig, savepath, frames; framerate = N÷25) do frame
+
+
+
+        sc1s[] = positions[1:2, 1, frame] |> Point2f
+        sc2s[] = positions[1:2, 2, frame] |> Point2f
+        sc3s[] = positions[1:2, 3, frame] |> Point2f
+
+        notify(sc1s)
+        notify(sc2s)
+        notify(sc3s)
+
+            # axs[i].azimuth[] = 2π*sin(frame/N)
+        next!(p)
+    end
+
+end
