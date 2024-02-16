@@ -790,14 +790,14 @@ end
 
 function chaotic_3body(;outname="chaotic_3body", showplot=false)
     masses = [1.0, 1.0, 1.0]u"Msun"
-    N = 1000
+    N = 3000
     e = [0.1, 0.5]
     i = [0.0, 0.0]u"rad"
-    a = [0.4, 0.8]u"AU"
+    a = [0.8, 1.1]u"AU"
     positions = zeros(3, 3, N)
 
     triple = multibodysystem(masses, a=a, e=e, i=i)
-    res = simulate(triple, t_sim=10.0, npoints=N, callbacks=[])
+    res = simulate(triple, t_sim=15.0, npoints=N, callbacks=[])
     sol = analyse_simulation(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     
@@ -819,8 +819,8 @@ function chaotic_3body(;outname="chaotic_3body", showplot=false)
                          xgridvisible=false, ygridvisible=false, backgroundcolor=:transparent)
     
     hidespines!(ax)
-    xlims!(ax, -1, 1)
-    ylims!(ax, -1, 1)
+    xlims!(ax, -1.5, 1.5)
+    ylims!(ax, -1.5, 1.5)
 
     frames = 2:N
 
@@ -843,7 +843,7 @@ function chaotic_3body(;outname="chaotic_3body", showplot=false)
     # scatter!(ax, sc3s, markersize=100, markerspace=:pixel)
 
 
-    savepath = joinpath(FIGPATH, outname)*".gif"
+    savepath = joinpath(FIGPATH, outname)*".mp4"
 
     p = Progress(N)
     record(fig, savepath, frames; framerate = N÷25) do frame
@@ -862,4 +862,94 @@ function chaotic_3body(;outname="chaotic_3body", showplot=false)
         next!(p)
     end
 
+end
+
+function many_binaries_2d(;outname="many_binaries_2d")
+    N = 2000
+    es = [0.1, 0.3, 0.6, 0.9]
+    m1 = 1.0u"Msun"
+    a = 1.0u"AU"
+    qs = [1.0, 0.5, 0.1]
+    params = [[es[i], qs[j]] for j in eachindex(qs), i in eachindex(es)]
+    positions = zeros(size(params)..., 3, 2, N)
+
+    for i in axes(params, 1)
+        for j in axes(params, 2)
+            e, q = params[i, j]
+            masses = [m1, m1*q]
+            triple = multibodysystem(masses, a=a, e=e)
+            res = simulate(triple, t_sim=2, npoints=N, callbacks=[])
+            sol = analyse_simulation(res)
+            positions[i, j, :, :, :] = ustrip.(u"AU", sol.r)
+        end
+    end
+
+    fig = Figure(size=(1920, 1080))
+    axs = [Axis(fig[i, j], aspect=1) for i in axes(params, 1), j in axes(params, 2)]
+    # axs = Axis(fig[1, 1])
+    colgap!(fig.layout, 0)
+    rowgap!(fig.layout, 0)
+    for ax in axs
+        hidedecorations!(ax)
+        hidespines!(ax)
+        xlims!(ax, -a.val*1.1, a.val*1.1)
+        ylims!(ax, -a.val*1.1, a.val*1.1)
+    end
+
+    frames = 2:N
+
+    # r1s = [Observable(Point2f[]) for i in axes(params, 1), j in axes(params, 2)]
+    # r2s = [Observable(Point2f[]) for i in axes(params, 1), j in axes(params, 2)]
+    # r3s = [Observable(Point2f[]) for i in axes(params, 1), j in axes(params, 2)]
+
+    sc1s = [Observable{Point2f}() for i in axes(params, 1), j in axes(params, 2)]
+    sc2s = [Observable{Point2f}() for i in axes(params, 1), j in axes(params, 2)]
+
+    
+    nt = N÷100*40
+    r1s = [CircularBuffer{Point2f}(nt) for i in axes(params, 1), j in axes(params, 2)]
+    r2s = [CircularBuffer{Point2f}(nt) for i in axes(params, 1), j in axes(params, 2)]
+
+    for i in CartesianIndices(axs)
+        fill!(r1s[i], positions[i, 1:2, 1, 1])
+        fill!(r2s[i], positions[i, 1:2, 2, 1])
+    end
+
+    r1s = Observable.(r1s)
+    r2s = Observable.(r2s)
+
+    colors = Makie.wong_colors()[[1, 2]]
+    trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
+
+
+    for i in CartesianIndices(axs)
+        lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=2.5)
+        lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=2.5)
+        scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
+        scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
+    end
+
+    p = Progress(N)
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷25) do frame
+
+        for i in CartesianIndices(axs)
+            
+            push!(r1s[i][], positions[i, 1:2, 1, frame])
+            push!(r2s[i][], positions[i, 1:2, 2, frame])
+
+            sc1s[i][] = positions[i, 1:2, 1, frame] |> Point2f
+            sc2s[i][] = positions[i, 1:2, 2, frame] |> Point2f
+
+            
+            notify(r1s[i])
+            notify(r2s[i])
+
+
+            notify(sc1s[i])
+            notify(sc2s[i])
+        end
+
+        next!(p)
+    end
 end
