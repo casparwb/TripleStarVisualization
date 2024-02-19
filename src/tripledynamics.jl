@@ -7,7 +7,7 @@ GLMakie.set_theme!(theme_black())
 
 const FIGPATH = joinpath(@__DIR__, "..", "figures")
 function many_triples_2d(;outname="many_triples_2d")
-    masses = [1.0, 1.0, 1.0]u"Msun"
+    masses = [1.0, 2.0, 1.0]u"Msun"
     N = 2000
     es = [[0.1, 0.1], [0.1, 0.5], [0.1, 0.9]]
     smas = [[0.1, 3.0]u"AU", [0.3, 3.0]u"AU", [0.6, 3.0]u"AU", [0.8, 2.0]u"AU"]
@@ -200,7 +200,7 @@ end
 
 function kozai_lidov(;outname = "kozai_lidov")
     masses = [1.0, 1.0, 1.0]u"Msun"
-    N = 10000
+    N = 30000
     e = 0.1
     i = [π/2, 0.0]u"rad"
     smas = [0.3, 2.0]u"AU"
@@ -208,13 +208,14 @@ function kozai_lidov(;outname = "kozai_lidov")
 
 
     triple = multibodysystem(masses, a=smas, e=e, i=i)
-    res = simulate(triple, t_sim=100, npoints=N, callbacks=[])
+    res = simulate(triple, t_sim=60, npoints=N, callbacks=[])
     sol = analyse_simulation(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     
 
     fig = Figure(size=(1080, 1080))
     colors = [:red, :cyan, :yellow]
+    # colors = Makie.wong_colors()
     ax = Axis3(fig[1, 1], xticklabelsvisible=false, 
                                  yticklabelsvisible=false, 
                                  zticklabelsvisible=false)
@@ -226,21 +227,32 @@ function kozai_lidov(;outname = "kozai_lidov")
 
     frames = 1:N
 
+    # nt = N÷100*50
+    # r1s = CircularBuffer{Point3f}(nt)
+    # r2s = CircularBuffer{Point3f}(nt)
+    # r3s = CircularBuffer{Point3f}(nt)
+
+    # fill!(r1s, positions[:, 1, 1])
+    # fill!(r2s, positions[:, 2, 1])
+    # fill!(r3s, positions[:, 3, 1])
+
+    # r1s = Observable(r1s)
+    # r2s = Observable(r2s)
+    # r3s = Observable(r3s)
+
+    # trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
+
     r1s = Observable(Point3f[])
     r2s = Observable(Point3f[])
     r3s = Observable(Point3f[])
 
-
     lines!(ax, r1s, color=colors[1], linewidth=1)
     lines!(ax, r2s, color=colors[2], linewidth=1)
     lines!(ax, r3s, color=colors[3], linewidth=1)
-    
-    # lines!(axs[1, 1], seco[1], seco[2], color=colors[2], linewidth=1)
-    # lines!(axs[1, 1], tert[1], tert[2], color=colors[3], linewidth=1)
 
     p = Progress(N)
     savepath = joinpath(FIGPATH, outname)*".mp4"
-    record(fig, savepath, frames; framerate = N÷15) do frame
+    record(fig, savepath, frames; framerate = N÷20) do frame
 
 
         push!(r1s[], positions[:, 1, frame])
@@ -258,7 +270,7 @@ end
 
 function kozai_lidov_inner_binary(;outname="kozai_lidov_inner_binary")
     masses = [1.0, 1.0, 1.0]u"Msun"
-    N = 100#10000
+    N = 10000
     e = 0.1
     i = [π/2, 0.0]u"rad"
     smas = [0.3, 2.0]u"AU"
@@ -299,18 +311,16 @@ function kozai_lidov_inner_binary(;outname="kozai_lidov_inner_binary")
     fill!(r1s, positions[[1,3], 1, 1] .- com_in[1][[1, 3]])
     fill!(r2s, positions[[1,3], 2, 1] .- com_in[1][[1, 3]])
     
-    e_ins = Observable(Point[])
-    i_muts = Observable(Point[])
-    
-    e_in, i_mut = get_orbital_elements(sol.r[:,:,1], sol.v[:,:,1], masses)
-    fill!(e_ins, Point(e_in))
-    fill!(i_muts, Point(ustrip(u"°", i_mut)))
-
     r1s = Observable(r1s)
     r2s = Observable(r2s)  
 
-    # e_ins = Observable(e_ins)
-    # i_muts = Observable(i_muts)
+
+    e_ins = Observable(Point2f[])
+    i_muts = Observable(Point2f[])
+    
+    e_in, i_mut = get_orbital_elements(sol.r[:,:,1], sol.v[:,:,1], masses)
+
+    i_mut = ustrip.(u"°", i_mut)
 
     colors = Makie.wong_colors()[[1, 2]]
     trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
@@ -318,10 +328,12 @@ function kozai_lidov_inner_binary(;outname="kozai_lidov_inner_binary")
     lines!(ax, r1s, color=trailcolors[1], linewidth=1)
     lines!(ax, r2s, color=trailcolors[2], linewidth=1)
 
-    scatter!(ax_ecc, P_outs[1], e_ins)
-    scatter!(ax_inc, P_outs[1], i_muts)
+    scatter!(ax_ecc, Point2f(P_outs[1], e_in))
+    scatter!(ax_inc, Point2f(P_outs[1], i_mut))
 
     savepath = joinpath(FIGPATH, outname)*".mp4"
+
+    p = Progress(N)
     record(fig, savepath, frames; framerate = N÷20) do frame
 
         push!(r1s[], positions[[1,3], 1, frame] .- com_in[frame][[1,3]])
@@ -331,11 +343,12 @@ function kozai_lidov_inner_binary(;outname="kozai_lidov_inner_binary")
         notify(r2s)
 
         e_in, i_mut = get_orbital_elements(sol.r[:,:,frame], sol.v[:,:,frame], masses)
-        push!(e_ins[], [e_in])
-        push!(i_muts[], [ustrip(u"°", i_mut)])
+        push!(e_ins[], Point2f(P_outs[frame], e_in))
+        push!(i_muts[], Point2f(P_outs[frame], i_mut))
 
         notify(e_ins)
         notify(i_muts)
+        next!(p)
     end
 end
 
@@ -368,9 +381,121 @@ function get_orbital_elements(r, v, masses)
 
     h_out = Syzygy.angular_momentum(r_rel, v_rel)
 
-    i_mut =  Syzygy.mutual_inclination.(h_in, h_out)
+    i_mut =  Syzygy.mutual_inclination(h_in, h_out)
 
     return e_in, i_mut
+end
+
+function kozai_lidov_full(;outname="kozai_lidov_full")
+    masses = [1.0, 1.0, 1.0]u"Msun"
+    N = 20000
+    e = 0.1
+    i = [π/2, 0.0]u"rad"
+    smas = [0.3, 2.0]u"AU"
+    positions = zeros(3, 3, N)
+
+
+    triple = multibodysystem(masses, a=smas, e=e, i=i)
+    res = simulate(triple, t_sim=60, npoints=N, callbacks=[])
+    sol = analyse_simulation(res)
+    positions[:, :, :] = ustrip.(u"AU", sol.r)
+    com_in = map(i -> Syzygy.centre_of_mass(sol.r[:, 1:2, i], masses[1:2]), eachindex(sol.t))
+    com_in = map(x -> ustrip.(u"AU", x), com_in)
+    P_outs = sol.t ./ triple.binaries[2].elements.P .|> upreferred
+
+
+    fig = Figure(size=(1920, 1080))
+
+
+    # colors = [:red, :cyan, :yellow]
+    colors = Makie.wong_colors()
+
+    # ax = Axis3(fig[1, 1],  xticklabelsvisible=false, 
+    #                          yticklabelsvisible=false, 
+    #                          zticklabelsvisible=false)
+    ax_ecc = Axis(fig[1, 2], xticklabelsvisible=false, xgridvisible=false, ygridvisible=false, yticklabelsize=20)
+    ax_inc = Axis(fig[2, 2], xgridvisible=false, ygridvisible=false, yticklabelsize=20, xticksvisible=false, xticklabelsvisible=false)
+    ax_inn = Axis(fig[1:2, 1], xticklabelsvisible=false, yticksvisible=false, xticksvisible=false,
+                             yticklabelsvisible=false, xgridvisible=false, ygridvisible=false)
+    
+    xlims!(ax_ecc, 0, P_outs[end])
+    xlims!(ax_inc, 0, P_outs[end])
+    ylims!(ax_ecc, -0.1, 1.1)
+    ylims!(ax_inc, 20, 90)
+    
+    xlims!(ax_inn, -0.5, 0.5)
+    ylims!(ax_inn, -0.5, 0.5)
+
+    hidespines!(ax_inn)
+    # hidespines!(ax)
+    # xlims!(ax, -2, 2)
+    # ylims!(ax, -2, 2)
+    # zlims!(ax, -2, 2)
+
+    frames = 2:N
+    nt = N÷100*15
+
+    # r1s = Observable(Point3f[])
+    # r2s = Observable(Point3f[])
+    # r3s = Observable(Point3f[])
+
+    # lines!(ax, r1s, color=colors[1], linewidth=1)
+    # lines!(ax, r2s, color=colors[2], linewidth=1)
+    # lines!(ax, r3s, color=colors[3], linewidth=1)
+
+    r1s_inn = CircularBuffer{Point2f}(nt)
+    r2s_inn = CircularBuffer{Point2f}(nt)
+
+    fill!(r1s_inn, positions[[1,3], 1, 1] .- com_in[1][[1, 3]])
+    fill!(r2s_inn, positions[[1,3], 2, 1] .- com_in[1][[1, 3]])
+    
+    r1s_inn = Observable(r1s_inn)
+    r2s_inn = Observable(r2s_inn)  
+    
+    e_ins = Observable(Point2f[(0.0, 0.0)])
+    i_muts = Observable(Point2f[(0.0, 0.0)])
+    
+    e_in, i_mut = get_orbital_elements(sol.r[:,:,1], sol.v[:,:,1], masses)
+
+    trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors[1:2]]
+
+    lines!(ax_inn, r1s_inn, color=trailcolors[1], linewidth=1)
+    lines!(ax_inn, r2s_inn, color=trailcolors[2], linewidth=1)
+
+    # scatter!(ax_ecc, Point2f(P_outs[1], e_in))
+    # scatter!(ax_inc, Point2f(P_outs[1], ustrip(u"°", i_mut)))
+
+    scatter!(ax_ecc, e_ins, color=:pink)
+    scatter!(ax_inc, i_muts, color=:pink)
+
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    p = Progress(N)
+    record(fig, savepath, frames; framerate = N÷30) do frame
+
+        # push!(r1s[], positions[:, 1, frame])
+        # push!(r2s[], positions[:, 2, frame])
+        # push!(r3s[], positions[:, 3, frame])
+        # notify(r1s)
+        # notify(r2s)
+        # notify(r3s)
+
+        push!(r1s_inn[], positions[[1,3], 1, frame] .- com_in[frame][[1,3]])
+        push!(r2s_inn[], positions[[1,3], 2, frame] .- com_in[frame][[1,3]])
+        
+        notify(r1s_inn)
+        notify(r2s_inn)
+
+        if iszero(mod(frame, 10))
+            e_in, i_mut = get_orbital_elements(sol.r[:,:,frame], sol.v[:,:,frame], masses)
+            # println(P_outs[frame], " ", e_in, " ", i_mut)
+            e_ins[] = push!(e_ins[], Point2f(P_outs[frame], e_in))
+            i_muts[] = push!(i_muts[], Point2f(P_outs[frame], ustrip(u"°", i_mut)))
+        end
+        # notify(e_ins)
+        # notify(i_muts)
+        next!(p) 
+    end
+
 end
 
 function plot_orbital_elements()
@@ -445,8 +570,8 @@ function plot_orbital_elements()
     scatter!(ax_eout, t, ustrip.(e_out), markersize=4)
     scatter!(ax_ein, t, ustrip.(e_in), markersize=4)
     scatter!(ax_imut, t, ustrip.(u"°", i_mut), markersize=4)
-    save("figures/orbital_elements.png", fig)
-    # fig
+    # save("figures/orbital_elements.png", fig)
+    fig
 
 end
 
@@ -819,13 +944,10 @@ function chaotic_3body(;outname="chaotic_3body", showplot=false)
                          xgridvisible=false, ygridvisible=false, backgroundcolor=:transparent)
     
     hidespines!(ax)
-    xlims!(ax, -1.5, 1.5)
-    ylims!(ax, -1.5, 1.5)
+    xlims!(ax, -2.5, 2.5)
+    ylims!(ax, -2.5, 2.5)
 
     frames = 2:N
-
-    nt = N÷100*20
-
     colors = Makie.wong_colors()[[1, 2, 3]]
 
 
@@ -838,12 +960,7 @@ function chaotic_3body(;outname="chaotic_3body", showplot=false)
     scatter!(ax, sc2s, color=colors[2], colormap=Makie.wong_colors(), colorrange=(1, 3), markersize=100, markerspace=:pixel)
     scatter!(ax, sc3s, color=colors[3], colormap=Makie.wong_colors(), colorrange=(1, 3), markersize=100, markerspace=:pixel)
 
-    # scatter!(ax, sc1s, markersize=100, markerspace=:pixel)
-    # scatter!(ax, sc2s, markersize=100, markerspace=:pixel)
-    # scatter!(ax, sc3s, markersize=100, markerspace=:pixel)
-
-
-    savepath = joinpath(FIGPATH, outname)*".mp4"
+    savepath = joinpath(FIGPATH, outname)*".gif"
 
     p = Progress(N)
     record(fig, savepath, frames; framerate = N÷25) do frame
@@ -898,10 +1015,6 @@ function many_binaries_2d(;outname="many_binaries_2d")
 
     frames = 2:N
 
-    # r1s = [Observable(Point2f[]) for i in axes(params, 1), j in axes(params, 2)]
-    # r2s = [Observable(Point2f[]) for i in axes(params, 1), j in axes(params, 2)]
-    # r3s = [Observable(Point2f[]) for i in axes(params, 1), j in axes(params, 2)]
-
     sc1s = [Observable{Point2f}() for i in axes(params, 1), j in axes(params, 2)]
     sc2s = [Observable{Point2f}() for i in axes(params, 1), j in axes(params, 2)]
 
@@ -918,20 +1031,20 @@ function many_binaries_2d(;outname="many_binaries_2d")
     r1s = Observable.(r1s)
     r2s = Observable.(r2s)
 
-    colors = Makie.wong_colors()[[1, 2]]
+    colors = Makie.wong_colors()[[2, 3]]
     trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
 
 
     for i in CartesianIndices(axs)
-        lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=2.5)
-        lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=2.5)
+        lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=4)
+        lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=4)
         scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
         scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
     end
 
     p = Progress(N)
     savepath = joinpath(FIGPATH, outname)*".mp4"
-    record(fig, savepath, frames; framerate = N÷25) do frame
+    record(fig, savepath, frames; framerate = N÷18) do frame
 
         for i in CartesianIndices(axs)
             
