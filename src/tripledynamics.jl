@@ -578,15 +578,20 @@ end
 
 function unstable_triple(;outname="unstable_triple", showplot=false, kwargs...)
     masses = [1.0, 1.0, 1.0]u"Msun"
-    N = 5000
-    e = 0.1
+    N = 10000
+    # e = 0.2
+    # i = [0.0, 0.0]u"rad"
+    # a = [0.6, 2.0]u"AU"
+
+    e = 0.4
     i = [0.0, 0.0]u"rad"
-    a = [0.8, 2.0]u"AU"
+    a = [0.6, 2.0]u"AU"
+
     positions = zeros(3, 3, N)
 
 
     triple = multibodysystem(masses, a=a, e=e, i=i)
-    res = simulate(triple, t_sim=10, npoints=N, callbacks=[])
+    res = simulate(triple, t_sim=25, npoints=N, callbacks=[])
     sol = analyse_simulation(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     
@@ -638,7 +643,8 @@ function unstable_triple(;outname="unstable_triple", showplot=false, kwargs...)
     scatter!(ax, sc3s, color=colors[3], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
 
     savepath = joinpath(FIGPATH, outname)*".mp4"
-    record(fig, SAVEPATH, frames; framerate = N÷25) do frame
+    p = Progress(N)
+    record(fig, savepath, frames; framerate = N÷25) do frame
 
 
         push!(r1s[], positions[1:2, 1, frame])
@@ -658,12 +664,12 @@ function unstable_triple(;outname="unstable_triple", showplot=false, kwargs...)
         notify(sc3s)
 
             # axs[i].azimuth[] = 2π*sin(frame/N)
-
+        next!(p)
     end
 end
 
 
-function collision_mesh_animation(T, showplot=false)
+function collision_mesh_animation(T=6.242690855674927e8u"s"; showplot=false)
     masses = [1.0, 1.0, 1.0]u"Msun"
     N = 5_000
 
@@ -683,7 +689,7 @@ function collision_mesh_animation(T, showplot=false)
     
     
     triple = multibodysystem(masses, a=a, e=e, i=i, R=R)
-    res = simulate(triple, t_sim=T, npoints=N, callbacks=["collision"])
+    res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
     @show res.retcode
     sol = analyse_simulation(res)
     N = length(sol.t)
@@ -696,9 +702,9 @@ function collision_mesh_animation(T, showplot=false)
     if showplot
         figg = Figure()
         axx = Axis3(figg[1, 1], aspect=:equal)
-    	xlims!(axx, -Rs[1]*3, Rs[1]*3)
-    	ylims!(axx, -Rs[1]*3, Rs[1]*3)
-    	zlims!(axx, -Rs[1]*3, Rs[1]*3)
+    	# xlims!(axx, -a[1].val*5, a[1].val*5)
+    	# ylims!(axx, -a[1].val*5, a[1].val*5)
+    	# zlims!(axx, -a[1].val*5, a[1].val*5)
 
         # xlims!(axx, -0.05, 0.05)
         # ylims!(axx, -0.05, 0.05)
@@ -811,7 +817,7 @@ function collision_mesh_animation(T, showplot=false)
             # println((frame - N)/((N÷100)*10))
             ax2.azimuth[] = 2π*sin((N - frame)/((N÷100)*10))
         end
-            next!(p)
+        next!(p)
     end
 
 # 	row = df[1222,:]
