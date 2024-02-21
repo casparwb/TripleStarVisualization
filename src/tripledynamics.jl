@@ -1061,27 +1061,29 @@ end
 
 function real_unstable_triples(T=20)
 
-    N = 5000
+    N = 10_000
 
     files = readdir(joinpath(@__DIR__, "..", "data"), join=true)
 
     ejections = filter(x -> occursin("ejection", x), files)
     collisions = filter(x -> occursin("collision", x), files)
 
-    triple_ejection = JLD2.load(ejections[1])
-    triple_collision = JLD2.load(collisions[1])
+    triple_ejection = JLD2.load(ejections[1], "triple")
+    triple_collision = JLD2.load(collisions[1], "triple")
 
-    animate_1_triple(triple_ejection, T, N, "real_triple_ejection")
-    animate_1_triple(triple_collision, T, N, "real_triple_collision")
+    # animate_1_triple(triple_ejection, T, N, "real_triple_ejection")
+    animate_1_triple(triple_collision, 14, N, "real_triple_collision")
 
 end
 
 function animate_1_triple(triple, T, N, outname)
-
-    res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
+    a_out = triple.binaries[2].elements.a |> u"AU" |> ustrip
+    res = simulate(triple, t_sim=T, npoints=N, callbacks=["escape", "collision"])
     sol = analyse_simulation(res)
+    positions = zeros(3, 3, length(sol.t))
     positions[:, :, :] = ustrip.(u"AU", sol.r)
-    
+    # return res.retcode, length(sol.t)
+    N = length(sol.t)
 
     fig = Figure(size=(1080, 1080))
     colors = [:red, :cyan, :yellow]
@@ -1089,25 +1091,41 @@ function animate_1_triple(triple, T, N, outname)
     ax = Axis3(fig[1, 1], xticklabelsvisible=false, 
                                  yticklabelsvisible=false, 
                                  zticklabelsvisible=false)
-    
+    # ax.elevation = 0.25π
     hidespines!(ax)
-    xlims!(ax, -2, 2)
-    ylims!(ax, -2, 2)
-    zlims!(ax, -2, 2)
+    xlims!(ax, -a_out*1.1, a_out*1.1)
+    ylims!(ax, -a_out*1.1, a_out*1.1)
+    zlims!(ax, -a_out*1.1, a_out*1.1)
 
     frames = 1:N
 
-    r1s = Observable(Point3f[])
-    r2s = Observable(Point3f[])
-    r3s = Observable(Point3f[])
+    # r1s = Observable(Point3f[])
+    # r2s = Observable(Point3f[])
+    # r3s = Observable(Point3f[])
 
-    lines!(ax, r1s, color=colors[1], linewidth=1)
-    lines!(ax, r2s, color=colors[2], linewidth=1)
-    lines!(ax, r3s, color=colors[3], linewidth=1)
+    nt = N÷100*10
+    r1s = CircularBuffer{Point3f}(nt)
+    r2s = CircularBuffer{Point3f}(nt)
+    r3s = CircularBuffer{Point3f}(nt)
+
+    fill!(r1s, positions[:, 1, 1])
+    fill!(r2s, positions[:, 2, 1])
+    fill!(r3s, positions[:, 3, 1])
+
+    r1s = Observable(r1s)
+    r2s = Observable(r2s)
+    r3s = Observable(r3s)
+    colors = Makie.wong_colors()[[1, 2, 3]]
+    trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
+
+
+    lines!(ax, r1s, color=trailcolors[1], linewidth=3)
+    lines!(ax, r2s, color=trailcolors[2], linewidth=3)
+    lines!(ax, r3s, color=trailcolors[3], linewidth=3)
 
     p = Progress(N)
     savepath = joinpath(FIGPATH, outname)*".mp4"
-    record(fig, savepath, frames; framerate = N÷20) do frame
+    record(fig, savepath, frames; framerate = N÷30) do frame
 
 
         push!(r1s[], positions[:, 1, frame])
@@ -1118,7 +1136,101 @@ function animate_1_triple(triple, T, N, outname)
         notify(r3s)
 
         next!(p)
-            # axs[i].azimuth[] = 2π*sin(frame/N)
+        ax.azimuth[] = 2π*sin(frame/N) - π
 
+    end
+end
+
+function chaotic_triple_varying_nu(T=20; outname="varying_nu")
+
+    N = 10_000
+
+    files = readdir(joinpath(@__DIR__, "..", "data"), join=true)
+
+    collisions = filter(x -> occursin("14838", x), files)
+    collisions = filter(x -> !occursin("collision", x), collisions)
+    n = length(collisions)
+
+    positions = zeros(n, 3, 3, N)
+
+    for i ∈ 1:n
+        triple = JLD2.load(collisions[i], "triple")
+        res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
+        sol = analyse_simulation(res)
+        positions[i, :, :, :] = ustrip.(u"AU", sol.r)
+    end
+
+    fig = Figure(size=(1920, 1080))
+    colors = [:red, :cyan, :yellow]
+    ax = Axis3(fig[1, 1], xticklabelsvisible=false, 
+                          yticklabelsvisible=false, 
+                          zticklabelsvisible=false)
+
+    hidespines!(ax)
+    xlims!(ax, -10, 10)
+    ylims!(ax, -10, 10)
+    zlims!(ax, -10, 10)
+
+    frames = 2:N
+
+    nt = N÷100*10
+    r1s = [CircularBuffer{Point3f}(nt) for i = 1:n]
+    r2s = [CircularBuffer{Point3f}(nt) for i = 1:n]
+    r3s = [CircularBuffer{Point3f}(nt) for i = 1:n]
+
+    for i = 1:n
+        fill!(r1s[i], positions[i, :, 1, 1])
+        fill!(r2s[i], positions[i, :, 2, 1])
+        fill!(r3s[i], positions[i, :, 3, 1])
+    end
+
+    r1s = Observable.(r1s)
+    r2s = Observable.(r2s)
+    r3s = Observable.(r3s)
+
+    colors = Makie.ColorSchemes.viridis[1:end÷(n-1):end]#Makie.wong_colors()
+    trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
+
+    sc1s = [Observable{Point3f}() for i = 1:n]
+    sc2s = [Observable{Point3f}() for i = 1:n]
+    sc3s = [Observable{Point3f}() for i = 1:n]
+
+
+
+    for i = 1:n
+        lines!(ax, r1s[i], color=trailcolors[i], linewidth=3, linestyle=:solid)
+        lines!(ax, r2s[i], color=trailcolors[i], linewidth=3, linestyle=:dash)
+        lines!(ax, r3s[i], color=trailcolors[i], linewidth=3, linestyle=:dashdot)
+        scatter!(ax, sc1s[i], color=colors[i], marker=:star5, colormap=:viridis, colorrange=(1, 256))
+        scatter!(ax, sc2s[i], color=colors[i], marker=:star6, colormap=:viridis, colorrange=(1, 256))
+        scatter!(ax, sc3s[i], color=colors[i], marker=:star8, colormap=:viridis, colorrange=(1, 256))
+
+    end
+
+    p = Progress(N)
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷40) do frame
+
+        for i = 1:n
+            push!(r1s[i][], positions[i, :, 1, frame])
+            push!(r2s[i][], positions[i, :, 2, frame])
+            push!(r3s[i][], positions[i, :, 3, frame])
+
+            sc1s[i][] = positions[i, :, 1, frame] |> Point3f
+            sc2s[i][] = positions[i, :, 2, frame] |> Point3f
+            sc3s[i][] = positions[i, :, 3, frame] |> Point3f
+
+            notify(r1s[i])
+            notify(r2s[i])
+            notify(r3s[i])
+
+            notify(sc1s[i])
+            notify(sc2s[i])
+            notify(sc3s[i])
+
+        end
+        ax.azimuth[] = 2π*sin(2frame/N) - π
+        # ax.elevation[] = 0.1π*sin(2frame/N)
+        next!(p)
     end
 end
