@@ -1063,7 +1063,7 @@ function real_unstable_triples(T=20)
 
     N = 5000
 
-    files = readdir(joinpath(@__DIR__, "..", "data"), join=true)
+    files = readdir(joinpath(@__DIR__, "data"), join=true)
 
     ejections = filter(x -> occursin("ejection", x), files)
     collisions = filter(x -> occursin("collision", x), files)
