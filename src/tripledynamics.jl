@@ -2,8 +2,9 @@
 using Syzygy, GLMakie, LinearAlgebra, ProgressMeter
 using Syzygy, GLMakie, LinearAlgebra, ProgressMeter
 using DataStructures: CircularBuffer
+using JLD2
 GLMakie.set_theme!(theme_black())
-GLMakie.set_theme!(theme_black())
+
 
 const FIGPATH = joinpath(@__DIR__, "..", "figures")
 function many_triples_2d(;outname="many_triples_2d")
@@ -226,21 +227,6 @@ function kozai_lidov(;outname = "kozai_lidov")
     zlims!(ax, -2, 2)
 
     frames = 1:N
-
-    # nt = N÷100*50
-    # r1s = CircularBuffer{Point3f}(nt)
-    # r2s = CircularBuffer{Point3f}(nt)
-    # r3s = CircularBuffer{Point3f}(nt)
-
-    # fill!(r1s, positions[:, 1, 1])
-    # fill!(r2s, positions[:, 2, 1])
-    # fill!(r3s, positions[:, 3, 1])
-
-    # r1s = Observable(r1s)
-    # r2s = Observable(r2s)
-    # r3s = Observable(r3s)
-
-    # trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
 
     r1s = Observable(Point3f[])
     r2s = Observable(Point3f[])
@@ -1070,5 +1056,69 @@ function many_binaries_2d(;outname="many_binaries_2d")
         end
 
         next!(p)
+    end
+end
+
+function real_unstable_triples(T=20)
+
+    N = 5000
+
+    files = readdir(joinpath(@__DIR__, "..", "data"), join=true)
+
+    ejections = filter(x -> occursin("ejection", x), files)
+    collisions = filter(x -> occursin("collision", x), files)
+
+    triple_ejection = JLD2.load(ejections[1])
+    triple_collision = JLD2.load(collisions[1])
+
+    animate_1_triple(triple_ejection, T, N, "real_triple_ejection")
+    animate_1_triple(triple_collision, T, N, "real_triple_collision")
+
+end
+
+function animate_1_triple(triple, T, N, outname)
+
+    res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
+    sol = analyse_simulation(res)
+    positions[:, :, :] = ustrip.(u"AU", sol.r)
+    
+
+    fig = Figure(size=(1080, 1080))
+    colors = [:red, :cyan, :yellow]
+    # colors = Makie.wong_colors()
+    ax = Axis3(fig[1, 1], xticklabelsvisible=false, 
+                                 yticklabelsvisible=false, 
+                                 zticklabelsvisible=false)
+    
+    hidespines!(ax)
+    xlims!(ax, -2, 2)
+    ylims!(ax, -2, 2)
+    zlims!(ax, -2, 2)
+
+    frames = 1:N
+
+    r1s = Observable(Point3f[])
+    r2s = Observable(Point3f[])
+    r3s = Observable(Point3f[])
+
+    lines!(ax, r1s, color=colors[1], linewidth=1)
+    lines!(ax, r2s, color=colors[2], linewidth=1)
+    lines!(ax, r3s, color=colors[3], linewidth=1)
+
+    p = Progress(N)
+    savepath = joinpath(FIGPATH, outname)*".mp4"
+    record(fig, savepath, frames; framerate = N÷20) do frame
+
+
+        push!(r1s[], positions[:, 1, frame])
+        push!(r2s[], positions[:, 2, frame])
+        push!(r3s[], positions[:, 3, frame])
+        notify(r1s)
+        notify(r2s)
+        notify(r3s)
+
+        next!(p)
+            # axs[i].azimuth[] = 2π*sin(frame/N)
+
     end
 end
