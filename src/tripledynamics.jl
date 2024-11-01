@@ -1,9 +1,10 @@
 
-using Syzygy, GLMakie, LinearAlgebra, ProgressMeter
-using Syzygy, GLMakie, LinearAlgebra, ProgressMeter
+using Syzygy, LinearAlgebra, ProgressMeter
 using DataStructures: CircularBuffer
 using JLD2
-GLMakie.set_theme!(theme_black())
+using GLMakie
+# using CairoMakie
+# CairoMakie.set_theme!(theme_black())
 
 
 const FIGPATH = joinpath(@__DIR__, "..", "figures")
@@ -19,7 +20,7 @@ function many_triples_2d(;outname="many_triples_2d")
         for j in axes(params, 2)
             triple = multibodysystem(masses, a=params[i, j][2], e=params[i, j][1])
             res = simulate(triple, t_sim=2, npoints=N, callbacks=[])
-            sol = analyse_simulation(res)
+            sol = to_solution(res)
             positions[i, j, :, :, :] = ustrip.(u"AU", sol.r)
         end
     end
@@ -67,13 +68,15 @@ function many_triples_2d(;outname="many_triples_2d")
 
 
     for i in CartesianIndices(axs)
-        lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=2.5)
-        lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=2.5)
-        lines!(axs[i], r3s[i], color=trailcolors[3], linewidth=2.5)
-        scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
-        scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
-        scatter!(axs[i], sc3s[i], color=colors[3], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
-
+        lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=4.0)
+        lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=4.0)
+        lines!(axs[i], r3s[i], color=trailcolors[3], linewidth=4.0)
+        scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
+        scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
+        scatter!(axs[i], sc3s[i], color=colors[3], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
     end
 
     p = Progress(N)
@@ -118,7 +121,7 @@ function mutual_inclination(;outname = "mutual_inclination")
     for i ∈ CartesianIndices(incs)
         triple = multibodysystem(masses, a=smas, e=e, i = incs[i])
         res = simulate(triple, t_sim=2, npoints=N, callbacks=[])
-        sol = analyse_simulation(res)
+        sol = to_solution(res)
         positions[i, :, :, :] = ustrip.(u"AU", sol.r)
     end
 
@@ -162,12 +165,15 @@ function mutual_inclination(;outname = "mutual_inclination")
 
 
     for i in CartesianIndices(axs)
-        lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=2.5)
-        lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=2.5)
-        lines!(axs[i], r3s[i], color=trailcolors[3], linewidth=2.5)
-        scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
-        scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
-        scatter!(axs[i], sc3s[i], color=colors[3], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
+        lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=4.0)
+        lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=4.0)
+        lines!(axs[i], r3s[i], color=trailcolors[3], linewidth=4.0)
+        scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
+        scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
+        scatter!(axs[i], sc3s[i], color=colors[3], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
 
     end
 
@@ -210,7 +216,7 @@ function kozai_lidov(;outname = "kozai_lidov")
 
     triple = multibodysystem(masses, a=smas, e=e, i=i)
     res = simulate(triple, t_sim=60, npoints=N, callbacks=[])
-    sol = analyse_simulation(res)
+    sol = to_solution(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     
 
@@ -264,7 +270,7 @@ function kozai_lidov_inner_binary(;outname="kozai_lidov_inner_binary")
 
     triple = multibodysystem(masses, a=smas, e=e, i=i)
     res = simulate(triple, t_sim=30, npoints=N, callbacks=[])
-    sol = analyse_simulation(res)
+    sol = to_solution(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     com_in = map(i -> Syzygy.centre_of_mass(sol.r[:, 1:2, i], masses[1:2]), eachindex(sol.t))
     com_in = map(x -> ustrip.(u"AU", x), com_in)
@@ -345,23 +351,102 @@ function get_orbital_elements(r, v, masses)
     # com_in = reduce(hcat, com_in)
     # v_com_in = reduce(hcat, v_com_in)
 
+    M = sum(masses)
+    M12 = masses[1] + masses[2]
+
     r_rel = r[particle=3] - com_in
     r_in = r[particle=2] - r[particle=1]
 
     v_rel = v[particle=3] - v_com_in
     v_in = v[particle=2] - v[particle=1]
     
-    d_rel = norm(r_rel)
-    v²_rel = norm(v_rel) ^ 2
+    # d_rel = norm(r_rel)
+    # v²_rel = norm(v_rel) ^ 2
 
     d_in = norm(r_in)
     v²_in = norm(v_in) ^ 2
 
-    a_out = Syzygy.semi_major_axis(d_rel, v²_rel, sum(masses)) 
-    a_in = Syzygy.semi_major_axis(d_in, v²_in, sum(masses)) 
+    # a_out = Syzygy.semi_major_axis(d_rel, v²_rel, M) 
+    a_in = Syzygy.semi_major_axis(d_in, v²_in, M) 
 
-    e_out = Syzygy.eccentricity(r_rel, v_rel, a_out, sum(masses))
-    e_in = Syzygy.eccentricity(r_in, v_in, a_in, sum(masses[1:2]))
+    # e_out = Syzygy.eccentricity(r_rel, v_rel, a_out, M)
+    e_in = Syzygy.eccentricity(r_in, v_in, a_in, M12)
+
+    h_in = Syzygy.angular_momentum(r_in, v_in)
+
+    h_out = Syzygy.angular_momentum(r_rel, v_rel)
+
+    i_mut =  Syzygy.mutual_inclination(h_in, h_out)
+
+    return e_in, i_mut
+end
+
+function get_inner_eccentricity_from_eccentricity_vector(sol)
+
+    r, v = sol.r, sol.v
+
+    r_in = r[particle=2] .- r[particle=1]
+    v_in = v[particle=2] .- v[particle=1]
+
+    d_in = norm.(eachcol(r_in))
+
+    n = eachcol(r_in) ./ d_in
+    μ = GRAVCONST*(sol.ic.particles.mass[1] + sol.ic.particles.mass[2])
+
+
+    e_in = zeros(Float64, length(sol.t))
+    for i in eachindex(sol.t)
+        e_vec = (v_in[:,i] × (r_in[:,i] × v_in[:,i]))/μ - n[i] |> norm
+        e_in[i] = e_vec
+    end
+
+    return e_in
+    # return Syzygy.eccentricity_vector.(eachcol(r_in), eachcol(d_in), eachcol(v_in), μ)
+end
+
+function get_inner_eccentricity_from_eccentricity_vector(r, v, M12)
+
+    r_in = r[particle=2] - r[particle=1]
+    v_in = v[particle=2] - v[particle=1]
+
+    d_in = norm(r_in)
+
+    n = r_in / d_in
+    μ = GRAVCONST*M12
+
+
+    (v_in × (r_in × v_in))/μ - n |> norm
+    # return Syzygy.eccentricity_vector.(eachcol(r_in), eachcol(d_in), eachcol(v_in), μ)
+end
+
+function get_imut_and_ein(r, v, masses)
+    com_in = Syzygy.centre_of_mass(r[:, 1:2], masses[1:2])
+    v_com_in = Syzygy.centre_of_mass_velocity(v[:, 1:2], masses[1:2])
+    
+    # com_in = reduce(hcat, com_in)
+    # v_com_in = reduce(hcat, v_com_in)
+
+    # M = sum(masses)
+    M12 = masses[1] + masses[2]
+
+    r_rel = r[particle=3] - com_in
+    r_in = r[particle=2] - r[particle=1]
+
+    v_rel = v[particle=3] - v_com_in
+    v_in = v[particle=2] - v[particle=1]
+    
+    # d_rel = norm(r_rel)
+    # v²_rel = norm(v_rel) ^ 2
+
+    # d_in = norm(r_in)
+    # v²_in = norm(v_in) ^ 2
+
+    # a_out = Syzygy.semi_major_axis(d_rel, v²_rel, M) 
+    # a_in = Syzygy.semi_major_axis(d_in, v²_in, M) 
+
+    # e_out = Syzygy.eccentricity(r_rel, v_rel, a_out, M)
+    # e_in = Syzygy.eccentricity(r_in, v_in, a_in, M12)
+    e_in = get_inner_eccentricity_from_eccentricity_vector(r, v, M12)
 
     h_in = Syzygy.angular_momentum(r_in, v_in)
 
@@ -374,16 +459,18 @@ end
 
 function kozai_lidov_full(;outname="kozai_lidov_full")
     masses = [1.0, 1.0, 1.0]u"Msun"
-    N = 20000
+    N = 2000#8000#20000
     e = 0.1
     i = [π/2, 0.0]u"rad"
     smas = [0.3, 2.0]u"AU"
     positions = zeros(3, 3, N)
 
+    T = 20#60
+
 
     triple = multibodysystem(masses, a=smas, e=e, i=i)
-    res = simulate(triple, t_sim=60, npoints=N, callbacks=[])
-    sol = analyse_simulation(res)
+    res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
+    sol = to_solution(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     com_in = map(i -> Syzygy.centre_of_mass(sol.r[:, 1:2, i], masses[1:2]), eachindex(sol.t))
     com_in = map(x -> ustrip.(u"AU", x), com_in)
@@ -399,10 +486,10 @@ function kozai_lidov_full(;outname="kozai_lidov_full")
     # ax = Axis3(fig[1, 1],  xticklabelsvisible=false, 
     #                          yticklabelsvisible=false, 
     #                          zticklabelsvisible=false)
-    ax_ecc = Axis(fig[1, 2], xticklabelsvisible=false, xgridvisible=false, ygridvisible=false, yticklabelsize=20)
-    ax_inc = Axis(fig[2, 2], xgridvisible=false, ygridvisible=false, yticklabelsize=20, xticksvisible=false, xticklabelsvisible=false)
+    ax_ecc = Axis(fig[1, 2], xticklabelsvisible=false, xgridvisible=false, ygridvisible=false, yticklabelsize=20, ylabel="Inner eccentricity", ylabelsize=30)
+    ax_inc = Axis(fig[2, 2], xgridvisible=false, ygridvisible=false, yticklabelsize=20, xticksvisible=false, xticklabelsvisible=false, ylabel="Inclination [°]", ylabelsize=30)
     ax_inn = Axis(fig[1:2, 1], xticklabelsvisible=false, yticksvisible=false, xticksvisible=false,
-                             yticklabelsvisible=false, xgridvisible=false, ygridvisible=false)
+                             yticklabelsvisible=false, xgridvisible=false, ygridvisible=false, title="Inner orbit", titlesize=40)
     
     xlims!(ax_ecc, 0, P_outs[end])
     xlims!(ax_inc, 0, P_outs[end])
@@ -413,6 +500,8 @@ function kozai_lidov_full(;outname="kozai_lidov_full")
     ylims!(ax_inn, -0.5, 0.5)
 
     hidespines!(ax_inn)
+
+    # return fig
     # hidespines!(ax)
     # xlims!(ax, -2, 2)
     # ylims!(ax, -2, 2)
@@ -441,7 +530,8 @@ function kozai_lidov_full(;outname="kozai_lidov_full")
     e_ins = Observable(Point2f[(0.0, 0.0)])
     i_muts = Observable(Point2f[(0.0, 0.0)])
     
-    e_in, i_mut = get_orbital_elements(sol.r[:,:,1], sol.v[:,:,1], masses)
+    e_in, i_mut = get_imut_and_ein(sol.r[:,:,1], sol.v[:,:,1], masses)#get_orbital_elements(sol.r[:,:,1], sol.v[:,:,1], masses)
+    # e_prev = e_in
 
     trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors[1:2]]
 
@@ -451,12 +541,15 @@ function kozai_lidov_full(;outname="kozai_lidov_full")
     # scatter!(ax_ecc, Point2f(P_outs[1], e_in))
     # scatter!(ax_inc, Point2f(P_outs[1], ustrip(u"°", i_mut)))
 
-    scatter!(ax_ecc, e_ins, color=:pink)
-    scatter!(ax_inc, i_muts, color=:pink)
+    # scatter!(ax_ecc, e_ins, color=:pink)
+    # scatter!(ax_inc, i_muts, color=:pink)
+
+    lines!(ax_ecc, e_ins, color=:pink)
+    lines!(ax_inc, i_muts, color=:pink)
 
     savepath = joinpath(FIGPATH, outname)*".mp4"
     p = Progress(N)
-    record(fig, savepath, frames; framerate = N÷30) do frame
+    record(fig, savepath, frames; framerate = N÷25) do frame
 
         # push!(r1s[], positions[:, 1, frame])
         # push!(r2s[], positions[:, 2, frame])
@@ -471,12 +564,13 @@ function kozai_lidov_full(;outname="kozai_lidov_full")
         notify(r1s_inn)
         notify(r2s_inn)
 
-        if iszero(mod(frame, 10))
-            e_in, i_mut = get_orbital_elements(sol.r[:,:,frame], sol.v[:,:,frame], masses)
+        # if iszero(mod(frame, 10))
+            e_in, i_mut = get_imut_and_ein(sol.r[:,:,frame], sol.v[:,:,frame], masses)
+            # if abs(e_in - e_prev)
             # println(P_outs[frame], " ", e_in, " ", i_mut)
             e_ins[] = push!(e_ins[], Point2f(P_outs[frame], e_in))
             i_muts[] = push!(i_muts[], Point2f(P_outs[frame], ustrip(u"°", i_mut)))
-        end
+        # end
         # notify(e_ins)
         # notify(i_muts)
         next!(p) 
@@ -486,41 +580,46 @@ end
 
 function plot_orbital_elements()
     masses = [1.0, 1.0, 1.0]u"Msun"
-    N = 10000
-    e = 0.1
+    # N = 10000
+    e = [0.1, 0.4]
     i = [π/2, 0.0]u"rad"
     smas = [0.3, 2.0]u"AU"
-    step = 10
     # positions = zeros(3, 3, N)
 
-
     triple = multibodysystem(masses, a=smas, e=e, i=i)
-    res = simulate(triple, t_sim=200, npoints=N, callbacks=[])
-    sol = analyse_simulation(res)
+    P = triple.binaries[2].elements.P
+    res = simulate(triple, t_sim=1000, saveat=upreferred(P).val, callbacks=[])
+    sol = to_solution(res)
     # return sol
-    r = sol.r[:,:,1:step:end]
-    v = sol.v[:,:,1:step:end]
-    t = sol.t[1:step:end] ./ triple.binaries[2].elements.P .|> upreferred
+    r = sol.r[:,:,:]
+    v = sol.v[:,:,:]
+    t = sol.t ./ triple.binaries[2].elements.P .|> upreferred
     # positions[:, :, :] = ustrip.(u"AU", sol.r)
     
 
-    fig = Figure()#size=(1080, 1080)
+    fig = Figure(size=(1980, 1080))
     colors = [:red, :cyan, :yellow]
     
     # ax_aout = Axis(fig[1, 1], title=L"a_{{\text{out}}} \quad [\text{R}_\odot]", 
     #                titlesize=30, xticklabelsvisible=false)
     # ax_ain  = Axis(fig[1, 2], title=L"a_{{\text{in}}} \quad [\text{R}_\odot]", 
     #                titlesize=30, xticklabelsvisible=false)
-    ax_eout = Axis(fig[1, 1], title=L"e_{{\text{out}}}", 
-                   titlesize=30, xticklabelsvisible=false)
-    ax_ein  = Axis(fig[1, 2], title=L"e_{{\text{in}}}", 
-                   titlesize=30, xticklabelsvisible=false)
-    ax_imut = Axis(fig[2,1:2], title=L"i_{{\text{mut}}} \quad [°]", 
-                   titlesize=30, xlabel="# outer orbits")
+    # ax_eout = Axis(fig[1, 1], title=L"e_{{\text{out}}}", 
+    #                titlesize=30, xticklabelsvisible=false)
+    # ax_ein  = Axis(fig[1, 2], title=L"e_{{\text{in}}}", 
+    #                titlesize=30, xticklabelsvisible=false)
+    # ax_imut = Axis(fig[2,1:2], title=L"i_{{\text{mut}}} \quad [°]", 
+    #                titlesize=30, xlabel="# outer orbits")
+
+    axe = Axis(fig[1, 1], yscale = log10, ylabel = "1 - eᵢₙ", ylabelsize=30)
+    axi = Axis(fig[2, 1], ylabel = L"i_$\text{mut}$ [°]", ylabelsize=30,
+                          xlabel="# outer orbits", xlabelsize=20, xticks=Makie.WilkinsonTicks(10))
+
+    hidexdecorations!(axe)
 
     # hidespines!(ax)
     # xlims!(ax, -2, 2)
-    ylims!(ax_eout, 0, 1)
+
     # zlims!(ax, -2, 2)
 
     com_in = map(i -> Syzygy.centre_of_mass(r[:, 1:2, i], masses[1:2]), eachindex(t))
@@ -553,10 +652,21 @@ function plot_orbital_elements()
 
     i_mut =  Syzygy.mutual_inclination.(h_in, h_out)
 
-    scatter!(ax_eout, t, ustrip.(e_out), markersize=4)
-    scatter!(ax_ein, t, ustrip.(e_in), markersize=4)
-    scatter!(ax_imut, t, ustrip.(u"°", i_mut), markersize=4)
-    # save("figures/orbital_elements.png", fig)
+    # scatter!(ax_eout, t, ustrip.(e_out), markersize=4)
+    # scatter!(ax_ein, t, ustrip.(e_in), markersize=4)
+    # scatter!(ax_imut, t, ustrip.(u"°", i_mut), markersize=4)
+    # lines!(ax_eout, t, ustrip.(e_out))
+    # lines!(ax_ein, t, ustrip.(e_in))
+    # lines!(ax_imut, t, ustrip.(u"°", i_mut))
+
+    # ylims!(axe, -0.1, 1.1)
+    ylims!(axi, 20, 100)
+
+    lines!(axe, t, 1 .- ustrip.(e_in))
+    lines!(axi, t, ustrip.(u"°", i_mut), color=:red)
+
+
+    save("figures/orbital_elements.png", fig)
     fig
 
 end
@@ -578,7 +688,7 @@ function unstable_triple(;outname="unstable_triple", showplot=false, kwargs...)
 
     triple = multibodysystem(masses, a=a, e=e, i=i)
     res = simulate(triple, t_sim=25, npoints=N, callbacks=[])
-    sol = analyse_simulation(res)
+    sol = to_solution(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     
     if showplot
@@ -677,7 +787,7 @@ function collision_mesh_animation(T=6.242690855674927e8u"s"; showplot=false)
     triple = multibodysystem(masses, a=a, e=e, i=i, R=R)
     res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
     @show res.retcode
-    sol = analyse_simulation(res)
+    sol = to_solution(res)
     N = length(sol.t)
     positions = zeros(3, 3, length(sol.t))
     positions[:, :, :] = ustrip.(u"AU", sol.r)
@@ -855,7 +965,7 @@ function simple_chaotic_threebody_vis(T=1; outname="simple_threebody_scatter")
 
     triple = multibodysystem(masses, a=a, e=e, i=i)
     res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
-    sol = analyse_simulation(res)
+    sol = to_solution(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     
     if showplot
@@ -915,7 +1025,7 @@ function chaotic_3body(;outname="chaotic_3body", showplot=false)
 
     triple = multibodysystem(masses, a=a, e=e, i=i)
     res = simulate(triple, t_sim=15.0, npoints=N, callbacks=[])
-    sol = analyse_simulation(res)
+    sol = to_solution(res)
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     
     if showplot
@@ -988,7 +1098,7 @@ function many_binaries_2d(;outname="many_binaries_2d")
             masses = [m1, m1*q]
             triple = multibodysystem(masses, a=a, e=e)
             res = simulate(triple, t_sim=2, npoints=N, callbacks=[])
-            sol = analyse_simulation(res)
+            sol = to_solution(res)
             positions[i, j, :, :, :] = ustrip.(u"AU", sol.r)
         end
     end
@@ -1030,8 +1140,10 @@ function many_binaries_2d(;outname="many_binaries_2d")
     for i in CartesianIndices(axs)
         lines!(axs[i], r1s[i], color=trailcolors[1], linewidth=4)
         lines!(axs[i], r2s[i], color=trailcolors[2], linewidth=4)
-        scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
-        scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, colormap=Makie.wong_colors(), colorrange=(1, 3))
+        scatter!(axs[i], sc1s[i], color=colors[1], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
+        scatter!(axs[i], sc2s[i], color=colors[2], marker=:star5, markersize=20,
+                 colormap=Makie.wong_colors(), colorrange=(1, 3))
     end
 
     p = Progress(N)
@@ -1063,7 +1175,7 @@ function real_unstable_triples(T=20)
 
     N = 10_000
 
-    files = readdir(joinpath(@__DIR__, "data"), join=true)
+    files = readdir(joinpath(@__DIR__, "..", "data"), join=true)
 
     ejections = filter(x -> occursin("ejection", x), files)
     collisions = filter(x -> occursin("collision", x), files)
@@ -1071,15 +1183,22 @@ function real_unstable_triples(T=20)
     triple_ejection = JLD2.load(ejections[1], "triple")
     triple_collision = JLD2.load(collisions[1], "triple")
 
-    # animate_1_triple(triple_ejection, T, N, "real_triple_ejection")
-    animate_1_triple(triple_collision, 14, N, "real_triple_collision")
+    animate_1_triple(triple_ejection, T, N, "real_triple_ejection_white")
+    animate_1_triple(triple_collision, 14, N, "real_triple_collision_white")
 
 end
 
 function animate_1_triple(triple, T, N, outname)
     a_out = triple.binaries[2].elements.a |> u"AU" |> ustrip
-    res = simulate(triple, t_sim=T, npoints=N, callbacks=["escape", "collision"])
-    sol = analyse_simulation(res)
+
+    radii = [p.structure.R for (k, p) in sort(triple.particles)]
+
+    triple = multibodysystem(triple.particles.mass, a=t.binaries.a, e=t.binaries.e, 
+                             ν=t.binaries.ν, ω=t.binaries.ω, Ω=t.binaries.Ω, 
+                             R=radii)
+
+    res = simulate(triple, t_sim=T, npoints=N, callbacks=[EscapeCB(), CollisionCB()])
+    sol = to_solution(res)
     positions = zeros(3, 3, length(sol.t))
     positions[:, :, :] = ustrip.(u"AU", sol.r)
     # return res.retcode, length(sol.t)
@@ -1143,7 +1262,7 @@ end
 
 function chaotic_triple_varying_nu(T=20; outname="varying_nu")
 
-    N = 10_000
+    N = 3500#10_000
 
     files = readdir(joinpath(@__DIR__, "..", "data"), join=true)
 
@@ -1155,8 +1274,13 @@ function chaotic_triple_varying_nu(T=20; outname="varying_nu")
 
     for i ∈ 1:n
         triple = JLD2.load(collisions[i], "triple")
+        radii = [p.structure.R for (k, p) in sort(triple.particles)]
+
+        triple = multibodysystem(triple.particles.mass, a=t.binaries.a, e=t.binaries.e, 
+                                 ν=t.binaries.ν, ω=t.binaries.ω, Ω=t.binaries.Ω, 
+                                 R=radii)
         res = simulate(triple, t_sim=T, npoints=N, callbacks=[])
-        sol = analyse_simulation(res)
+        sol = to_solution(res)
         positions[i, :, :, :] = ustrip.(u"AU", sol.r)
     end
 
@@ -1233,4 +1357,144 @@ function chaotic_triple_varying_nu(T=20; outname="varying_nu")
         # ax.elevation[] = 0.1π*sin(2frame/N)
         next!(p)
     end
+end
+
+
+function making_logo()
+
+    jl_red   = Makie.RGBf(([203, 60 ,61] ./ 255)...)
+    jl_green = Makie.RGBf(([56, 152 ,38] ./ 255)...)
+    jl_purp  = Makie.RGBf(([149, 88 ,178] ./ 255)...)
+
+
+    fig = Figure(size=(1080, 1080))#, backgroundcolor=:transparent)
+    # colors = [jl_red, jl_green, jl_purp]
+    colors = Makie.wong_colors()[2:5]
+    ax = Axis(fig[1, 1], xticklabelsvisible=false,
+                         yticklabelsvisible=false,
+                         xticksvisible=false,
+                         yticksvisible=false,
+                         xgridvisible=false, ygridvisible=false)#, backgroundcolor=:transparent)
+    
+    hidespines!(ax)
+
+    t0 = 1925.0u"d"
+    triple = multibodysystem([2.0, 1.0, 1.5]u"Msun", time=t0,
+                             a=[1.0, 8.0]u"AU", e=[0.0, 0.0])
+    # p = triple.binaries[2].elements.P
+
+    # p1 = [-0.7, -0.7, 0.0]u"AU"
+    # p2 = [0.7, -0.7, 0.0]u"AU"
+    # p3 = [0.0, 1.0, 0.0]u"AU"
+
+    # ps = [p1, p2, p3]
+    # vs = [zeros(3)u"km/s" for i = 1:3]
+
+    # particles = [Syzygy.Particle(p.key, p.parent, p.sibling, p.mass, pos, vel, p.structure, nothing) for (p, pos, vel) in zip(values(sort(triple.particles)), ps, vs)]
+    # particles = Dict(i => p for (i, p) in enumerate(particles))
+    # triple = Syzygy.MultiBodySystem(triple.n, triple.time, particles, triple.pairs,
+    #                                 triple.binaries, triple.levels, triple.root, triple.hierarchy, nothing)
+    sol = simulate(triple, t_sim=1.3, npoints=5_000) |> to_solution
+
+    N = length(sol.t)
+    positions = zeros(3, 3, N)
+
+    positions[:, :, :] = ustrip.(u"AU", sol.r)
+
+    nt = N#÷100*20
+
+    trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
+
+    lines!(ax, positions[1, 1, :], positions[2, 1, :], color=trailcolors[1], linewidth=5)
+    lines!(ax, positions[1, 2, :], positions[2, 2, :], color=trailcolors[2], linewidth=5)
+    lines!(ax, positions[1, 3, :], positions[2, 3, :], color=trailcolors[3], linewidth=5)
+
+    scatter!(ax, positions[1, 1, end], positions[2, 1, end], color=colors[1], markersize=100)
+    scatter!(ax, positions[1, 2, end], positions[2, 2, end], color=colors[2], markersize=100)
+    scatter!(ax, positions[1, 3, end], positions[2, 3, end], color=colors[3], markersize=100)
+
+    save(joinpath(@__DIR__, "..", "grouplogo.png"), fig)
+    # fig
+end
+
+
+function simple_hierarchical_triple_figure()
+
+
+    fig = Figure(size=(1080, 700), backgroundcolor=Makie.RGBf(([41,42,53] ./ 255)...) )
+    # colors = [jl_red, jl_green, jl_purp]
+    colors = Makie.wong_colors()[[3, 2, 4]]
+    ax = Axis(fig[1, 1], xticklabelsvisible=false,
+                         yticklabelsvisible=false,
+                         xticksvisible=false,
+                         yticksvisible=false,
+                         xgridvisible=false, ygridvisible=false, backgroundcolor=Makie.RGBf(([41,42,53] ./ 255)...))
+    
+    hidespines!(ax)
+
+    triple = multibodysystem([2.0, 1.0, 1.5]u"Msun",
+                             a=[0.5, 8.0]u"AU", e=[0.1, 0.5])
+
+    sol = simulate(triple, t_sim=1.2) |> to_solution
+
+    N = length(sol.t)
+    positions = zeros(3, 3, N)
+
+    positions[:, :, :] = ustrip.(u"AU", sol.r)
+
+    nt = N#÷100*20
+
+    trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
+
+    lines!(ax, positions[1, 1, :], positions[2, 1, :], color=trailcolors[1], linewidth=5)
+    lines!(ax, positions[1, 2, :], positions[2, 2, :], color=trailcolors[2], linewidth=5)
+    lines!(ax, positions[1, 3, :], positions[2, 3, :], color=trailcolors[3], linewidth=5)
+
+    scatter!(ax, positions[1, 1, end], positions[2, 1, end], color=colors[1], markersize=30)
+    scatter!(ax, positions[1, 2, end], positions[2, 2, end], color=colors[2], markersize=30)
+    scatter!(ax, positions[1, 3, end], positions[2, 3, end], color=colors[3], markersize=30)
+
+    save(joinpath(@__DIR__, "..", "simple-ht.png"), fig)
+    fig
+end
+
+function simple_unstable_triple_figure()
+
+
+    fig = Figure(size=(1080, 1080), backgroundcolor=Makie.RGBf(([41,42,53] ./ 255)...) )
+    # colors = [jl_red, jl_green, jl_purp]
+    colors = Makie.wong_colors()[[3, 2, 4]]
+    ax = Axis(fig[1, 1], xticklabelsvisible=false,
+                         yticklabelsvisible=false,
+                         xticksvisible=false,
+                         yticksvisible=false,
+                         xgridvisible=false, ygridvisible=false, backgroundcolor=Makie.RGBf(([41,42,53] ./ 255)...))
+    
+    hidespines!(ax)
+
+    triple = multibodysystem([2.0, 1.0, 1.5]u"Msun",
+                             a=[0.35, 1.0]u"AU", e=[0.1, 0.2])
+
+    sol = simulate(triple, t_sim=5.8) |> to_solution
+
+    N = length(sol.t)
+    positions = zeros(3, 3, N)
+
+    positions[:, :, :] = ustrip.(u"AU", sol.r)
+
+    Nn = N÷100*80
+    nt = Nn
+
+    trailcolors = [[RGBAf(c.r, c.g, c.b, (i/nt)^2.5) for i in 1:nt] for c in colors]
+
+    lines!(ax, positions[1, 1, end-Nn+1:end], positions[2, 1, end-Nn+1:end], color=trailcolors[1], linewidth=5)
+    lines!(ax, positions[1, 2, end-Nn+1:end], positions[2, 2, end-Nn+1:end], color=trailcolors[2], linewidth=5)
+    lines!(ax, positions[1, 3, end-Nn+1:end], positions[2, 3, end-Nn+1:end], color=trailcolors[3], linewidth=5)
+
+    scatter!(ax, positions[1, 1, end], positions[2, 1, end], color=colors[1], markersize=30)
+    scatter!(ax, positions[1, 2, end], positions[2, 2, end], color=colors[2], markersize=30)
+    scatter!(ax, positions[1, 3, end], positions[2, 3, end], color=colors[3], markersize=30)
+
+    save(joinpath(@__DIR__, "..", "simple-ut.png"), fig)
+    fig
 end
